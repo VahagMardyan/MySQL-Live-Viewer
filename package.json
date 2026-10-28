@@ -1,0 +1,16 @@
+{
+  "name": "mysql-live-viewer",
+  "version": "1.0.0",
+  "description": "Live auto-refreshing viewer for MySQL tables",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file=.env server.js"
+  },
+  "engines": {
+    "node": ">=20.6"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mysql2": "^3.11.0"
+  }
+}

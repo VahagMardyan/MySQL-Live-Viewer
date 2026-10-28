@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MySQL Live Viewer</title>
+<link rel="stylesheet" href="style.css">
+<script defer src="script.js"></script>
+</head>
+<body>
+<header>
+  <h1>MySQL Live Viewer <span class="db" id="db"></span></h1>
+  <div class="controls">
+    <span class="status"><span class="dot" id="dot"></span><span id="status">connecting…</span></span>
+    <label>Refresh
+      <select id="interval">
+        <option value="1000">1s</option>
+        <option value="2000" selected>2s</option>
+        <option value="5000">5s</option>
+        <option value="10000">10s</option>
+      </select>
+    </label>
+    <button id="pause">Pause</button>
+  </div>
+</header>
+<nav id="tabs"></nav>
+<main><div class="wrap" id="view"><div class="empty">Loading…</div></div></main>
+</body>
+</html>
