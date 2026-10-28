@@ -5,25 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MySQL Live Viewer</title>
 <link rel="stylesheet" href="style.css">
-<script defer src="script.js"></script>
+<script type="module" src="js/main.js"></script>
 </head>
 <body>
 <header>
   <h1>MySQL Live Viewer <span class="db" id="db"></span></h1>
   <div class="controls">
     <span class="status"><span class="dot" id="dot"></span><span id="status">connecting…</span></span>
+    <label>Rows
+      <select id="limit"></select>
+    </label>
     <label>Refresh
       <select id="interval">
         <option value="1000">1s</option>
-        <option value="2000" selected>2s</option>
+        <option value="2000">2s</option>
         <option value="5000">5s</option>
         <option value="10000">10s</option>
       </select>
     </label>
-    <button id="pause">Pause</button>
+    <button id="pause" type="button">Pause</button>
   </div>
 </header>
 <nav id="tabs"></nav>
+<div class="subbar">
+  <div class="segmented" id="views">
+    <button type="button" data-view="data">Data</button>
+    <button type="button" data-view="structure">Structure</button>
+  </div>
+  <span class="info" id="info"></span>
+</div>
 <main><div class="wrap" id="view"><div class="empty">Loading…</div></div></main>
 </body>
 </html>

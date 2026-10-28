@@ -6,9 +6,6 @@
   "scripts": {
     "start": "node --env-file=.env server.js"
   },
-  "engines": {
-    "node": ">=20.6"
-  },
   "dependencies": {
     "express": "^4.19.2",
     "mysql2": "^3.11.0"

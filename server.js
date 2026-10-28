@@ -1,72 +1,65 @@
-const express = require("express");
-const mysql = require("mysql2/promise");
+// Composition root: creates every object and wires the dependencies together.
 const path = require("path");
+const { Config } = require("./src/config/Config");
+const { Database } = require("./src/db/Database");
+const { DialectFactory } = require("./src/db/dialects/DialectFactory");
+const { SchemaRepository } = require("./src/repositories/SchemaRepository");
+const { RowRepository } = require("./src/repositories/RowRepository");
+const { RowLimitPolicy } = require("./src/services/RowLimitPolicy");
+const { TableService } = require("./src/services/TableService");
+const { TableController } = require("./src/http/TableController");
+const { WebServer } = require("./src/http/WebServer");
 
-const config = {
-  host: process.env.DB_HOST || "localhost",
-  port: Number(process.env.DB_PORT || 3306),
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-};
+async function main() {
+  const config = Config.fromEnv(process.env);
+  const db = new Database(config.db);
 
-if(!config.user || !config.database) {
-  console.error("Missing DB_USER or DB_NAME. Did you create .env from .env.example?");
+  let version;
+  try {
+    version = await db.getVersion();
+  } catch (err) {
+    await db.close();
+    throw new Error(`Cannot connect to the database: ${err.message}`);
+  }
+  const dialect = DialectFactory.fromVersion(version);
+
+  const rowLimitPolicy = new RowLimitPolicy(config.rowLimits, config.defaultRowLimit);
+  const tableService = new TableService({
+    schemaRepository: new SchemaRepository(db, dialect),
+    rowRepository: new RowRepository(db),
+    rowLimitPolicy,
+  });
+
+  const controller = new TableController({
+    tableService,
+    meta: {
+      database: config.db.database,
+      server: `${dialect.name} ${version}`,
+      rowLimits: rowLimitPolicy.allowed,
+      defaultRowLimit: rowLimitPolicy.default,
+    },
+  });
+
+  const server = new WebServer({
+    port: config.port,
+    publicDir: path.join(__dirname, "public"),
+    controllers: [controller],
+  });
+
+  await server.start();
+  console.log(`MySQL Live Viewer running at http://localhost:${config.port}`);
+  console.log(`Database: ${config.db.database} @ ${config.db.host}:${config.db.port} (${dialect.name} ${version})`);
+
+  const shutdown = async () => {
+    await server.stop();
+    await db.close();
+    process.exit(0);
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
+}
+
+main().catch((err) => {
+  console.error(err.message);
   process.exit(1);
-}
-
-const PORT = Number(process.env.PORT);
-const ROW_LIMIT = 1000;
-
-const pool = mysql.createPool({ ...config, connectionLimit: 5, dateStrings: true });
-const app = express();
-
-app.use(express.static(path.join(__dirname, "public")));
-
-async function listTables() {
-  const [rows] = await pool.query("SHOW TABLES");
-  return rows.map((r) => Object.values(r)[0]);
-}
-
-app.get("/api/tables", async (req, res) => {
-  try {
-    const tables = await listTables();
-    const result = [];
-    for (const t of tables) {
-      const [[{ n }]] = await pool.query("SELECT COUNT(*) AS n FROM ??", [t]);
-      result.push({ name: t, rows: n });
-    }
-    res.json({ database: config.database, tables: result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/table/:name", async (req, res) => {
-  try {
-    const tables = await listTables();
-    const name = req.params.name;
-    if (!tables.includes(name)) return res.status(404).json({ error: "Unknown table" });
-
-    const [cols] = await pool.query("SHOW COLUMNS FROM ??", [name]);
-    const pk = cols.find((c) => c.Key === "PRI");
-    const order = pk ? mysql.format(" ORDER BY ?? ", [pk.Field]) : " ";
-    const [rows] = await pool.query(
-      "SELECT * FROM ??" + order + "LIMIT " + ROW_LIMIT,
-      [name]
-    );
-    res.json({
-      table: name,
-      primaryKey: pk ? pk.Field : null,
-      columns: cols.map((c) => ({ name: c.Field, type: c.Type, key: c.Key })),
-      rows,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`MySQL Live Viewer running at http://localhost:${PORT}`);
-  console.log(`Database: ${config.database} @ ${config.host}:${config.port}`);
 });
