@@ -21,7 +21,10 @@ export class TableTabs extends Component {
       .map((t) => {
         const active = t.name === state.currentTable ? ' class="active"' : "";
         const view = t.isView ? '<span class="tag">view</span>' : "";
-        return `<button type="button" data-table="${esc(t.name)}"${active}>${esc(t.name)}${view}<span class="count">${formatCount(t.rows)}</span></button>`;
+        // Large tables show MySQL's estimate, marked with ≈, instead of an exact COUNT(*).
+        const count = t.exact ? formatCount(t.rows) : `≈${formatCount(t.rows)}`;
+        const title = t.exact ? "" : ' title="Estimated row count"';
+        return `<button type="button" data-table="${esc(t.name)}"${active}>${esc(t.name)}${view}<span class="count"${title}>${count}</span></button>`;
       })
       .join("");
   }

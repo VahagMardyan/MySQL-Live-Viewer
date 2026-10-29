@@ -3,14 +3,23 @@ import { Poller } from "./core/Poller.js";
 import { Toolbar } from "./components/Toolbar.js";
 import { TableTabs } from "./components/TableTabs.js";
 import { ViewSwitcher } from "./components/ViewSwitcher.js";
+import { Pager } from "./components/Pager.js";
+import { Notice } from "./components/Notice.js";
+import { GroupBar } from "./components/GroupBar.js";
 import { ContentArea } from "./components/ContentArea.js";
 
 const INTERVALS = [1000, 2000, 5000, 10000];
-const VIEWS = ["data", "structure"];
+const VIEWS = ["data", "group", "structure"];
+const FIRST_PAGE = Object.freeze({ page: 1 });
+const NO_GROUP = Object.freeze({ column: null, aggregates: [], sortBy: "count", direction: "DESC" });
 
 /**
  * Controller: owns the state, loads data from the API and exposes the actions
  * components call. Components only render; all decisions happen here.
+ *
+ * Paging: `anchor` says which page of rows to load and is re-sent on every refresh,
+ * so the view stays on the same rows while the table changes. `pageNumber` is the page
+ * being requested; once rows arrive, `rows.pageNumber` is the page actually shown.
  */
 export class App {
   #api;
@@ -29,10 +38,21 @@ export class App {
       tables: [],
       currentTable: saved.table ?? null,
       view: VIEWS.includes(saved.view) ? saved.view : "data",
-      limit: saved.limit ?? null, // validated once /api/meta tells us the allowed values
+      pageSize: saved.pageSize ?? null, // validated once /api/meta tells us the allowed values
       interval: INTERVALS.includes(saved.interval) ? saved.interval : 2000,
       paused: false,
+
+      // data view
+      sort: null, // { column, direction: "ASC" | "DESC" }
+      anchor: FIRST_PAGE,
+      pageNumber: 1,
       rows: null,
+
+      // group view
+      group: NO_GROUP,
+      groupPage: 1,
+      groups: null,
+
       structure: null,
       error: null,
       updatedAt: null,
@@ -40,12 +60,15 @@ export class App {
     this.#poller = new Poller(() => this.refresh(), this.#store.state.interval);
   }
 
-  mount(elements) {
+  mount(el) {
     const deps = { store: this.#store, actions: this };
-    new Toolbar(deps, elements);
-    new TableTabs(deps, elements.tabs);
-    new ViewSwitcher(deps, elements);
-    new ContentArea(deps, elements.view);
+    new Toolbar(deps, el);
+    new TableTabs(deps, el.tabs);
+    new ViewSwitcher(deps, el);
+    new Pager(deps, el.pager);
+    new Notice(deps, el.notice);
+    new GroupBar(deps, el.groupbar);
+    new ContentArea(deps, el.view);
     return this;
   }
 
@@ -54,24 +77,33 @@ export class App {
     this.#poller.start();
   }
 
-  // ---- actions (called by components) ----
+  get #state() {
+    return this.#store.state;
+  }
+
+  // ---- general actions ----
 
   selectTable(name) {
-    if (name === this.#store.state.currentTable) return;
-    this.#store.set({ currentTable: name });
+    if (name === this.#state.currentTable) return;
+    this.#store.set({
+      currentTable: name,
+      sort: null, anchor: FIRST_PAGE, pageNumber: 1,
+      group: NO_GROUP, groupPage: 1, groups: null,
+    });
     this.#prefs.save({ table: name });
     this.refresh();
   }
 
   setView(view) {
-    if (!VIEWS.includes(view)) return;
+    if (!VIEWS.includes(view) || view === this.#state.view) return;
     this.#store.set({ view });
     this.#prefs.save({ view });
+    this.refresh();
   }
 
-  setLimit(limit) {
-    this.#store.set({ limit });
-    this.#prefs.save({ limit });
+  setPageSize(pageSize) {
+    this.#store.set({ pageSize, anchor: FIRST_PAGE, pageNumber: 1, groupPage: 1 });
+    this.#prefs.save({ pageSize });
     this.refresh();
   }
 
@@ -82,7 +114,7 @@ export class App {
   }
 
   togglePause() {
-    const paused = !this.#store.state.paused;
+    const paused = !this.#state.paused;
     this.#store.set({ paused });
     if (paused) {
       this.#poller.stop();
@@ -92,6 +124,105 @@ export class App {
     }
   }
 
+  // ---- data view: sorting ----
+
+  /** Header click: ascending → descending → back to primary-key order. */
+  sortBy(column) {
+    const { sort } = this.#state;
+    let next;
+    if (!sort || sort.column !== column) next = { column, direction: "ASC" };
+    else if (sort.direction === "ASC") next = { column, direction: "DESC" };
+    else next = null;
+    this.#store.set({ sort: next, anchor: FIRST_PAGE, pageNumber: 1 });
+    this.refresh();
+  }
+
+  // ---- paging (works on whichever view is active) ----
+
+  firstPage() {
+    this.#state.view === "group" ? this.#goToGroupPage(1) : this.#goTo(FIRST_PAGE, 1);
+  }
+
+  lastPage() {
+    if (this.#state.view === "group") return this.#goToGroupPage(this.#state.groups?.totalPages ?? 1);
+    this.#goTo({ page: "last" }, this.#state.rows?.totalPages ?? 1);
+  }
+
+  nextPage() {
+    if (this.#state.view === "group") return this.#goToGroupPage(this.#state.groupPage + 1);
+    const { rows } = this.#state;
+    if (!rows?.hasNext) return;
+    // Continue right after the last row shown when cursors are available; otherwise by number.
+    const anchor = rows.lastCursor ? { after: rows.lastCursor } : { page: rows.pageNumber + 1 };
+    this.#goTo(anchor, rows.pageNumber + 1);
+  }
+
+  prevPage() {
+    if (this.#state.view === "group") return this.#goToGroupPage(this.#state.groupPage - 1);
+    const { rows } = this.#state;
+    if (!rows?.hasPrev || rows.pageNumber <= 1) return;
+    const anchor = rows.firstCursor ? { before: rows.firstCursor } : { page: rows.pageNumber - 1 };
+    this.#goTo(anchor, rows.pageNumber - 1);
+  }
+
+  goToPage(number) {
+    if (this.#state.view === "group") return this.#goToGroupPage(number);
+    const page = App.#clamp(number, this.#state.rows?.totalPages ?? 1);
+    this.#goTo(page === 1 ? FIRST_PAGE : { page }, page);
+  }
+
+  #goTo(anchor, pageNumber) {
+    this.#store.set({ anchor, pageNumber });
+    this.refresh();
+  }
+
+  #goToGroupPage(number) {
+    const page = App.#clamp(number, this.#state.groups?.totalPages ?? 1);
+    if (page === this.#state.groupPage) return;
+    this.#store.set({ groupPage: page });
+    this.refresh();
+  }
+
+  static #clamp(number, max) {
+    return Math.min(Math.max(1, Math.trunc(number) || 1), Math.max(1, max));
+  }
+
+  // ---- group view ----
+
+  setGroupColumn(column) {
+    this.#setGroup({ column: column || null, sortBy: "count", direction: "DESC" });
+  }
+
+  addAggregate(fn, column) {
+    const { aggregates } = this.#state.group;
+    if (aggregates.some((a) => a.fn === fn && a.column === column)) return;
+    this.#setGroup({ aggregates: [...aggregates, { fn, column }] });
+  }
+
+  removeAggregate(index) {
+    const { aggregates, sortBy } = this.#state.group;
+    const patch = { aggregates: aggregates.filter((_, i) => i !== index) };
+    if (typeof sortBy === "number") patch.sortBy = "count"; // aggregate indexes shifted
+    this.#setGroup(patch);
+  }
+
+  /** Group header click: "group", "count" or an aggregate index. Toggles direction on repeat. */
+  sortGroups(field) {
+    const { sortBy, direction } = this.#state.group;
+    const same = String(sortBy) === String(field);
+    const sortKey = field === "group" || field === "count" ? field : Number(field);
+    this.#setGroup({
+      sortBy: sortKey,
+      // Counts and totals read best largest-first; names alphabetically.
+      direction: same ? (direction === "ASC" ? "DESC" : "ASC") : sortKey === "group" ? "ASC" : "DESC",
+    });
+  }
+
+  #setGroup(patch) {
+    this.#store.set({ group: { ...this.#state.group, ...patch }, groupPage: 1 });
+    this.refresh();
+  }
+
   // ---- data loading ----
 
   async refresh() {
@@ -99,37 +230,71 @@ export class App {
     const isStale = () => id !== this.#requestId;
 
     try {
-      if (!this.#store.state.meta) await this.#loadMeta();
+      if (!this.#state.meta) await this.#loadMeta();
 
       const tables = await this.#api.getTables();
       if (isStale()) return;
 
       const names = tables.map((t) => t.name);
-      let { currentTable } = this.#store.state;
-      if (!names.includes(currentTable)) currentTable = names[0] ?? null;
+      const patch = { tables };
+      let table = this.#state.currentTable;
+      if (!names.includes(table)) {
+        table = names[0] ?? null;
+        Object.assign(patch, {
+          currentTable: table,
+          sort: null, anchor: FIRST_PAGE, pageNumber: 1,
+          group: NO_GROUP, groupPage: 1, groups: null,
+        });
+      }
 
-      let rows = null;
-      let structure = null;
-      if (currentTable) {
-        [rows, structure] = await Promise.all([
-          this.#api.getRows(currentTable, this.#store.state.limit),
-          this.#api.getStructure(currentTable),
+      if (table) {
+        // Only load what the active view shows: grouping a big table is expensive.
+        const state = { ...this.#state, ...patch };
+        const [structure, rows, groups] = await Promise.all([
+          this.#api.getStructure(table),
+          state.view === "data" ? this.#loadRows(table, state) : undefined,
+          state.view === "group" && state.group.column ? this.#loadGroups(table, state) : undefined,
         ]);
+        patch.structure = structure;
+        if (rows) {
+          patch.rows = rows;
+          patch.pageNumber = rows.pageNumber;
+        }
+        if (groups) {
+          patch.groups = groups;
+          patch.groupPage = groups.page;
+        }
       }
       if (isStale()) return;
 
-      this.#store.set({ tables, currentTable, rows, structure, error: null, updatedAt: new Date() });
+      this.#store.set({ ...patch, error: null, updatedAt: new Date() });
     } catch (err) {
       if (!isStale()) this.#store.set({ error: err.message });
     }
   }
 
+  async #loadRows(table, { pageSize, anchor, sort, pageNumber }) {
+    const rows = await this.#api.getRows(table, { size: pageSize, sort, ...anchor });
+    // The server knows the number for numbered jumps; cursor pages keep the number we aimed for.
+    // The pager shows this, so it only changes together with the rows.
+    rows.pageNumber = rows.page ?? (rows.hasPrev ? pageNumber : 1);
+    // Identifies the request, so the grid only flashes changes within the same page.
+    rows.requestKey = JSON.stringify([table, pageSize, sort, anchor]);
+    return rows;
+  }
+
+  async #loadGroups(table, { pageSize, group, groupPage }) {
+    const groups = await this.#api.getGroups(table, { size: pageSize, page: groupPage, ...group });
+    groups.requestKey = JSON.stringify([table, pageSize, group, groupPage]);
+    return groups;
+  }
+
   async #loadMeta() {
     const meta = await this.#api.getMeta();
-    const { limit } = this.#store.state;
+    const { pageSize } = this.#state;
     this.#store.set({
       meta,
-      limit: meta.rowLimits.includes(limit) ? limit : meta.defaultRowLimit,
+      pageSize: meta.pageSizes.includes(pageSize) ? pageSize : meta.defaultPageSize,
     });
   }
 }

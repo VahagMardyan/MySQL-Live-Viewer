@@ -12,8 +12,8 @@
   <h1>MySQL Live Viewer <span class="db" id="db"></span></h1>
   <div class="controls">
     <span class="status"><span class="dot" id="dot"></span><span id="status">connecting…</span></span>
-    <label>Rows
-      <select id="limit"></select>
+    <label>Rows per page
+      <select id="pageSize"></select>
     </label>
     <label>Refresh
       <select id="interval">
@@ -30,10 +30,14 @@
 <div class="subbar">
   <div class="segmented" id="views">
     <button type="button" data-view="data">Data</button>
+    <button type="button" data-view="group">Group</button>
     <button type="button" data-view="structure">Structure</button>
   </div>
   <span class="info" id="info"></span>
+  <div class="pager" id="pager"></div>
 </div>
+<div class="groupbar" id="groupbar" hidden></div>
+<div class="notice" id="notice" hidden></div>
 <main><div class="wrap" id="view"><div class="empty">Loading…</div></div></main>
 </body>
 </html>

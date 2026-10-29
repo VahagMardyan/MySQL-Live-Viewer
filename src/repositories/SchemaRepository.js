@@ -11,9 +11,11 @@ class SchemaRepository {
     this.#dialect = dialect;
   }
 
+  // TABLE_ROWS is MySQL's row estimate: instant to read, but approximate for InnoDB
+  // and NULL for views.
   async listTables() {
     return this.#db.query(`
-      SELECT TABLE_NAME AS name, TABLE_TYPE AS type
+      SELECT TABLE_NAME AS name, TABLE_TYPE AS type, TABLE_ROWS AS estimatedRows
       FROM information_schema.TABLES
       WHERE TABLE_SCHEMA = DATABASE()
       ORDER BY TABLE_NAME`);
@@ -21,7 +23,7 @@ class SchemaRepository {
 
   async findTable(name) {
     const [table] = await this.#db.query(
-      `SELECT TABLE_NAME AS name, TABLE_TYPE AS type
+      `SELECT TABLE_NAME AS name, TABLE_TYPE AS type, TABLE_ROWS AS estimatedRows
        FROM information_schema.TABLES
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
       [name]
@@ -96,6 +98,17 @@ class SchemaRepository {
       }),
       (row) => ({ columns: [row.columnName], referencedColumns: [row.referencedColumn] })
     );
+  }
+
+  /** Names of columns that start an index, i.e. columns MySQL can sort or group by without a full scan. */
+  async getIndexedColumns(table) {
+    const rows = await this.#db.query(
+      `SELECT DISTINCT COLUMN_NAME AS name
+       FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND SEQ_IN_INDEX = 1`,
+      [table]
+    );
+    return new Set(rows.map((r) => r.name));
   }
 
   async getCheckConstraints(table) {

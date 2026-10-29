@@ -10,6 +10,12 @@ class MySqlDialect extends Dialect {
     return "MySQL";
   }
 
+  // MySQL 8 caches information_schema row estimates for 24 hours by default,
+  // so a table that just grew would keep showing its old size. Turn the cache off.
+  sessionSql() {
+    return ["SET SESSION information_schema_stats_expiry = 0"];
+  }
+
   // MySQL's CHECK_CONSTRAINTS has no TABLE_NAME column, so join through TABLE_CONSTRAINTS.
   // Constraint names are unique per schema in MySQL, so joining on the name is safe.
   checkConstraintsSql() {

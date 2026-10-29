@@ -341,3 +341,135 @@ button.link {
   display: grid;
   gap: 10px;
 }
+
+/* ---------- pager ---------- */
+
+.subbar .info:empty {
+  display: none;
+}
+
+.pager {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pager .range {
+  color: var(--muted);
+  font-size: 13px;
+  margin-right: 6px;
+}
+
+.pager button {
+  padding: 4px 10px;
+  min-width: 34px;
+}
+
+.pager button:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+.page-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.page-input input {
+  font: inherit;
+  width: 80px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.page-input .of {
+  color: var(--muted);
+}
+
+/* ---------- sortable headers ---------- */
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+th.sortable:hover {
+  color: var(--accent);
+}
+
+th.sorted {
+  color: var(--accent);
+}
+
+th .arrow {
+  font-size: 10px;
+}
+
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- group controls ---------- */
+
+.groupbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 20px 0;
+}
+
+.groupbar[hidden],
+.notice[hidden],
+.pager[hidden] {
+  display: none;
+}
+
+.groupbar .sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 12.5px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 4px 2px 10px;
+}
+
+.chip button {
+  border: none;
+  background: none;
+  padding: 0 6px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.chip button:hover {
+  color: var(--error);
+}
+
+/* ---------- performance notice ---------- */
+
+.notice {
+  margin: 12px 20px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--changed);
+  background: color-mix(in srgb, var(--changed) 45%, transparent);
+  border-radius: 8px;
+  font-size: 13px;
+}

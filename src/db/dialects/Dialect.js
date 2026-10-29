@@ -7,6 +7,11 @@ class Dialect {
     throw new Error("Dialect.name not implemented");
   }
 
+  /** Statements to run on every new connection. */
+  sessionSql() {
+    return [];
+  }
+
   /** SQL returning { name, clause } rows for one table's CHECK constraints. Param: table name. */
   checkConstraintsSql() {
     throw new Error("Dialect.checkConstraintsSql not implemented");

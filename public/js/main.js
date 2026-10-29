@@ -9,12 +9,15 @@ new App({ api: new ApiClient("/api"), preferences: new Preferences() })
     db: $("db"),
     status: $("status"),
     dot: $("dot"),
-    limit: $("limit"),
+    pageSize: $("pageSize"),
     interval: $("interval"),
     pause: $("pause"),
     tabs: $("tabs"),
     views: $("views"),
     info: $("info"),
+    pager: $("pager"),
+    notice: $("notice"),
+    groupbar: $("groupbar"),
     view: $("view"),
   })
   .start();

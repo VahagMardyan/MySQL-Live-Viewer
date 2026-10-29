@@ -1,16 +1,18 @@
 import { esc } from "../utils/format.js";
 import { columnBadges } from "./badges.js";
+import { cell } from "./cells.js";
 
 const HIGHLIGHT_MS = 1500;
 
 /**
- * Renders table rows and highlights rows that are new (green) or changed (yellow)
- * since the previous refresh. Skips the DOM update when nothing changed.
+ * Renders one page of rows. Highlights rows that are new (green) or changed (yellow)
+ * since the previous refresh of the same page, and skips the DOM update when nothing
+ * changed. Column headers sort the table when clicked (handled by ContentArea).
  */
 export class DataGrid {
   #container;
   #previous = new Map(); // row key -> JSON of the row
-  #context = null;       // "table|limit" the previous rows belong to
+  #requestKey = null;    // which page the previous rows belong to
   #lastHeader = "";
 
   constructor(container) {
@@ -25,18 +27,17 @@ export class DataGrid {
       return;
     }
     if (!data.rows.length) {
-      this.#show(`<div class="empty">Table <b>${esc(data.table)}</b> is empty.</div>`);
+      this.#show(`<div class="empty">${data.totalRows ? "No rows on this page." : `Table <b>${esc(data.table)}</b> is empty.`}</div>`);
       this.#reset();
       return;
     }
 
-    // A different table or limit is a fresh start: nothing should flash.
-    const context = `${data.table}|${data.limit}`;
-    const firstLoad = context !== this.#context;
+    // A different table, page, size or sort is a fresh start: nothing should flash.
+    const firstLoad = data.requestKey !== this.#requestKey;
     if (firstLoad) this.#previous = new Map();
 
     const header = this.#renderHeader(data, structure);
-    const keyOf = DataGrid.#keyFunction(data.primaryKey);
+    const keyOf = DataGrid.#keyFunction(data);
 
     const next = new Map();
     const marks = [];
@@ -53,16 +54,12 @@ export class DataGrid {
       !force && !firstLoad && header === this.#lastHeader &&
       next.size === this.#previous.size && marks.every((m) => m === "");
     this.#previous = next;
-    this.#context = context;
+    this.#requestKey = data.requestKey;
     this.#lastHeader = header;
     if (unchanged) return;
 
     const body = data.rows
-      .map((row, i) => {
-        const cls = marks[i] ? ` class="${marks[i]}"` : "";
-        const cells = data.columns.map((c) => DataGrid.#cell(row[c.name])).join("");
-        return `<tr${cls}>${cells}</tr>`;
-      })
+      .map((row, i) => `<tr${marks[i] ? ` class="${marks[i]}"` : ""}>${row.map((v) => cell(v)).join("")}</tr>`)
       .join("");
     this.#show(`<table class="grid"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`);
 
@@ -78,7 +75,13 @@ export class DataGrid {
       structure && structure.table === data.table ? structure.columns.map((c) => [c.name, c]) : []
     );
     return data.columns
-      .map((c) => `<th><span class="col-name">${esc(c.name)}${columnBadges(byName.get(c.name))}</span><small>${esc(c.type)}</small></th>`)
+      .map((c) => {
+        const sorted = data.sort?.column === c.name;
+        const arrow = sorted ? `<span class="arrow">${data.sort.direction === "ASC" ? "▲" : "▼"}</span>` : "";
+        const indexed = byName.get(c.name)?.indexed ? "" : " (no index)";
+        return `<th class="sortable${sorted ? " sorted" : ""}" data-sort="${esc(c.name)}" title="Sort by ${esc(c.name)}${indexed}">
+          <span class="col-name">${esc(c.name)}${columnBadges(byName.get(c.name))}${arrow}</span><small>${esc(c.type)}</small></th>`;
+      })
       .join("");
   }
 
@@ -89,27 +92,14 @@ export class DataGrid {
 
   #reset() {
     this.#previous = new Map();
-    this.#context = null;
+    this.#requestKey = null;
     this.#lastHeader = "";
   }
 
-  static #keyFunction(primaryKey) {
+  // Rows are identified by their primary key, so an edited row shows as "changed", not "new".
+  static #keyFunction({ columns, primaryKey }) {
     if (!primaryKey.length) return (_row, i) => String(i);
-    return (row) => JSON.stringify(primaryKey.map((col) => row[col]));
-  }
-
-  static #cell(value) {
-    if (value === null || value === undefined) return '<td class="null">NULL</td>';
-    let text;
-    if (typeof value === "object") {
-      // Binary columns arrive as serialized Buffers; JSON columns as objects.
-      text = value.type === "Buffer" && Array.isArray(value.data)
-        ? `<binary ${value.data.length} bytes>`
-        : JSON.stringify(value);
-    } else {
-      text = String(value);
-    }
-    const safe = esc(text);
-    return `<td title="${safe}">${safe}</td>`;
+    const indexes = primaryKey.map((name) => columns.findIndex((c) => c.name === name));
+    return (row) => JSON.stringify(indexes.map((i) => row[i]));
   }
 }

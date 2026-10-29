@@ -14,18 +14,48 @@ export class ApiClient {
     return this.#get("/tables");
   }
 
-  getRows(table, limit) {
-    return this.#get(`/tables/${encodeURIComponent(table)}/rows?limit=${limit}`);
+  /**
+   * @param size   rows per page
+   * @param sort   { column, direction } or null
+   * @param page | after | before   which page: a number or "last", or a cursor
+   */
+  getRows(table, { size, sort, page, after, before }) {
+    return this.#get(`/tables/${encodeURIComponent(table)}/rows`, {
+      size,
+      sort: sort?.column,
+      dir: sort?.direction.toLowerCase(),
+      page,
+      after,
+      before,
+    });
+  }
+
+  /** @param aggregates [{ fn, column }] */
+  getGroups(table, { size, page, column, aggregates, sortBy, direction }) {
+    return this.#get(`/tables/${encodeURIComponent(table)}/groups`, {
+      by: column,
+      agg: aggregates.map((a) => `${a.fn}:${a.column}`).join(","),
+      sort: sortBy,
+      dir: direction.toLowerCase(),
+      size,
+      page,
+    });
   }
 
   getStructure(table) {
     return this.#get(`/tables/${encodeURIComponent(table)}/structure`);
   }
 
-  async #get(path) {
+  async #get(path, query = {}) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+    }
+    const url = this.#baseUrl + path + (params.size ? `?${params}` : "");
+
     let response;
     try {
-      response = await fetch(this.#baseUrl + path);
+      response = await fetch(url);
     } catch {
       throw new Error("Cannot reach the server. Is it running?");
     }

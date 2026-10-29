@@ -1,17 +1,28 @@
 const { ConfigError } = require("../errors");
 
-const ROW_LIMITS = Object.freeze([1000, 2000, 5000, 10000]);
+// Rows per page offered in the UI. The first matching DEFAULT_PAGE_SIZE is preselected.
+const PAGE_SIZES = Object.freeze([100, 250, 500, 1000]);
+const DEFAULT_PAGE_SIZE = 250;
+
+// Tables estimated above this many rows show MySQL's row estimate in the tabs
+// instead of running COUNT(*) on every refresh.
+const EXACT_COUNT_THRESHOLD = 100_000;
+
+// How long an exact COUNT(*) of a large table is reused before it is run again.
+const COUNT_CACHE_MS = 15_000;
 
 /**
  * Immutable application settings, built from environment variables.
  * Use Config.fromEnv(process.env) instead of calling the constructor directly.
  */
 class Config {
-  constructor({ db, port, rowLimits, defaultRowLimit }) {
+  constructor({ db, port, pageSizes, defaultPageSize, exactCountThreshold, countCacheMs }) {
     this.db = Object.freeze({ ...db });
     this.port = port;
-    this.rowLimits = rowLimits;
-    this.defaultRowLimit = defaultRowLimit;
+    this.pageSizes = pageSizes;
+    this.defaultPageSize = defaultPageSize;
+    this.exactCountThreshold = exactCountThreshold;
+    this.countCacheMs = countCacheMs;
     Object.freeze(this);
   }
 
@@ -32,8 +43,10 @@ class Config {
         database: env.DB_NAME,
       },
       port: Config.#toPort(env.PORT, 3000, "PORT"),
-      rowLimits: ROW_LIMITS,
-      defaultRowLimit: ROW_LIMITS[0],
+      pageSizes: PAGE_SIZES,
+      defaultPageSize: DEFAULT_PAGE_SIZE,
+      exactCountThreshold: EXACT_COUNT_THRESHOLD,
+      countCacheMs: COUNT_CACHE_MS,
     });
   }
 

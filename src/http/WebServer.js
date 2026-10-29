@@ -1,4 +1,5 @@
 const express = require("express");
+const compression = require("compression");
 const { AppError } = require("../errors");
 
 /** Builds the Express app (static files, API routes, error handling) and runs it. */
@@ -10,6 +11,7 @@ class WebServer {
   constructor({ port, publicDir, controllers }) {
     this.#port = port;
     this.#app = express();
+    this.#app.use(compression()); // gzip responses; table JSON shrinks several times
     this.#app.use(express.static(publicDir));
     for (const controller of controllers) this.#app.use("/api", controller.router);
     this.#app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
