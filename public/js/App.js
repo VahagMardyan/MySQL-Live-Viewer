@@ -337,25 +337,6 @@ export class App {
 
   // ---- editing: table ----
 
-  async truncateTable() {
-    const { currentTable: table, tables } = this.#state;
-    const info = tables.find((t) => t.name === table);
-    const count = info ? `${info.exact ? "" : "about "}${formatCount(info.rows)}` : "all";
-    const result = await confirmDialog({
-      title: `Truncate ${table}?`,
-      message: `<p>This deletes <b>all ${count} rows</b> of <b>${esc(table)}</b> at once and resets
-        AUTO_INCREMENT to 1. It can't be undone.</p>
-        <p class="muted">MySQL refuses if another table has a foreign key pointing to this one.</p>`,
-      confirmLabel: "Truncate table",
-      typeToConfirm: table,
-      onConfirm: (form) => this.#write.run(() => this.#api.truncate(table, form.elements.confirm.value)),
-    });
-    if (result) {
-      this.#store.set({ selected: [], anchor: FIRST_PAGE, pageNumber: 1 });
-      this.#changed(`${table} truncated`);
-    }
-  }
-
   async resetAutoIncrement() {
     const { currentTable: table } = this.#state;
     let info;

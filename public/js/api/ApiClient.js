@@ -101,10 +101,6 @@ export class ApiClient {
     return this.#request("DELETE", `${this.#table(table)}/rows`, { body: { keys }, write: true });
   }
 
-  truncate(table, confirm) {
-    return this.#request("POST", `${this.#table(table)}/truncate`, { body: { confirm }, write: true });
-  }
-
   resetAutoIncrement(table, value) {
     return this.#request("POST", `${this.#table(table)}/auto-increment`, { body: { value }, write: true });
   }

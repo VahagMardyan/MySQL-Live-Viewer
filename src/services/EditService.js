@@ -87,14 +87,6 @@ class EditService {
 
   // ---------- table ----------
 
-  async truncate(session, table, confirm) {
-    await this.#context(table);
-    if (confirm !== table) throw new ValidationError(`Type the table name "${table}" to confirm`);
-    await session.run((db) => new EditRepository(db).truncate(table));
-    this.#onChange(table);
-    return { truncated: true };
-  }
-
   /** Read-only: what the AUTO_INCREMENT dialog shows. */
   async getAutoIncrement(table) {
     const { column } = await this.#autoIncrementContext(table);

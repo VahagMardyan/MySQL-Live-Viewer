@@ -2,7 +2,7 @@
 
 A small web app that shows the tables of a MySQL database and refreshes them automatically. New rows flash green and changed rows flash yellow. Tables are shown one page at a time, so even tables with millions of rows stay fast. You can sort by any column, group by a column with aggregates, and inspect each table's structure and constraints.
 
-You can also edit: add, change and delete rows, add, change and drop columns, truncate a table and reset its AUTO_INCREMENT. Every change asks for a MySQL username and password first.
+You can also edit: add, change and delete rows, add, change and drop columns, and reset a table's AUTO_INCREMENT. Every change asks for a MySQL username and password first.
 
 Works with MySQL 8 and MariaDB 10.2+.
 
@@ -104,7 +104,6 @@ After 3 wrong passwords, each further try has to wait longer (2 s, 4 s, 8 s, up 
 
 **Table**:
 
-- **Truncate table…** deletes all rows at once and resets AUTO_INCREMENT. You have to type the table name to confirm. MySQL refuses if another table has a foreign key pointing to this one.
 - **Reset AUTO_INCREMENT…** shows the next value and the highest value in the table. Reset to the lowest possible value (highest + 1, or 1 for an empty table), or set a specific higher value. MySQL never goes below highest + 1.
 
 **Columns** (Structure view):
@@ -158,7 +157,7 @@ mysql-live-viewer/
 │   │   ├── SchemaRepository.js  # columns, constraints and indexes from information_schema
 │   │   ├── RowRepository.js     # paging queries (keyset and offset) and counts
 │   │   ├── GroupRepository.js   # GROUP BY queries with aggregates
-│   │   └── EditRepository.js    # INSERT, UPDATE, DELETE, TRUNCATE and ALTER TABLE
+│   │   └── EditRepository.js    # INSERT, UPDATE, DELETE and ALTER TABLE
 │   ├── services/
 │   │   ├── TableService.js      # table list, structure, pages of rows, sorting
 │   │   ├── GroupService.js      # group view, with a cache for slow results
@@ -235,7 +234,6 @@ mysql-live-viewer/
 | `POST /api/tables/:name/rows` | `{ values: { column: value } }` |
 | `PATCH /api/tables/:name/rows` | `{ key: { pk: value }, original: {...}, changes: {...} }` |
 | `DELETE /api/tables/:name/rows` | `{ keys: [{ pk: value }, ...] }` |
-| `POST /api/tables/:name/truncate` | `{ confirm: "table name" }` |
 | `GET /api/tables/:name/auto-increment` | (no token needed) next, highest and lowest possible value |
 | `POST /api/tables/:name/auto-increment` | `{ value }`, or `{}` for the lowest possible |
 | `POST /api/tables/:name/columns` | `{ column: {...}, position }` |

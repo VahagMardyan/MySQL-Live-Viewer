@@ -41,7 +41,6 @@ export class EditBar extends Component {
     }
     buttons.push('<span class="sep"></span>');
     if (autoIncrement) buttons.push('<button type="button" data-action="resetAutoIncrement">Reset AUTO_INCREMENT…</button>');
-    buttons.push('<button type="button" data-action="truncateTable" class="danger-text">Truncate table…</button>');
     this.#root.innerHTML = buttons.join("");
   }
 

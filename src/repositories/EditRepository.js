@@ -57,10 +57,6 @@ class EditRepository {
     });
   }
 
-  async truncate(table) {
-    await this.#db.query("TRUNCATE TABLE ??", [table]);
-  }
-
   async maxValue(table, column) {
     const [row] = await this.#db.query("SELECT MAX(??) AS m FROM ??", [column, table]);
     return row.m;

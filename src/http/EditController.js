@@ -38,8 +38,6 @@ class EditController {
       this.#edits.deleteRows(s, req.params.name, req.body?.keys)));
 
     // ---- table ----
-    r.post("/tables/:name/truncate", this.#write((s, req) =>
-      this.#edits.truncate(s, req.params.name, req.body?.confirm)));
     r.get("/tables/:name/auto-increment", this.#handle((req) =>
       this.#edits.getAutoIncrement(req.params.name)));
     r.post("/tables/:name/auto-increment", this.#write((s, req) =>
