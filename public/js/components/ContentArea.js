@@ -23,11 +23,24 @@ export class ContentArea extends Component {
 
     // One delegated listener for every clickable thing inside the panel.
     container.addEventListener("click", (e) => {
-      const target = e.target.closest("[data-goto], [data-sort], [data-group-sort]");
+      if (e.target.matches("input[type=checkbox]")) return; // handled by "change" below
+      const target = e.target.closest(
+        "[data-goto], [data-edit], [data-edit-column], [data-drop-column], [data-sort], [data-group-sort]"
+      );
       if (!target) return;
-      if (target.dataset.goto) this.actions.selectTable(target.dataset.goto);
-      else if (target.dataset.sort) this.actions.sortBy(target.dataset.sort);
-      else this.actions.sortGroups(target.dataset.groupSort);
+      const d = target.dataset;
+      if (d.goto) this.actions.selectTable(d.goto);
+      else if (d.edit) this.actions.editRow(d.edit);
+      else if (d.editColumn) this.actions.editColumn(d.editColumn);
+      else if (d.dropColumn) this.actions.dropColumn(d.dropColumn);
+      else if (d.sort) this.actions.sortBy(d.sort);
+      else this.actions.sortGroups(d.groupSort);
+    });
+
+    // Row checkboxes.
+    container.addEventListener("change", (e) => {
+      if (e.target.matches("input[data-select-all]")) this.actions.toggleAllRows(e.target.checked);
+      else if (e.target.matches("input[data-select]")) this.actions.toggleRow(e.target.dataset.select, e.target.checked);
     });
   }
 

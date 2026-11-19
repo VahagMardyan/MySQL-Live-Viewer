@@ -34,10 +34,11 @@ class MySqlDialect extends Dialect {
   // MySQL stores literals unquoted ("active", "0") and marks expressions
   // like CURRENT_TIMESTAMP with DEFAULT_GENERATED in EXTRA.
   parseDefault({ rawDefault, nullable, extra, dataType }) {
+    // `value` is the plain value without quotes, used to prefill the edit form.
     if (rawDefault === null) return Dialect.noDefault(nullable);
-    if (/DEFAULT_GENERATED/i.test(extra)) return { kind: "expression", text: rawDefault };
-    if (NUMERIC_TYPES.has(dataType)) return { kind: "value", text: rawDefault };
-    return { kind: "value", text: `'${rawDefault}'` };
+    if (/DEFAULT_GENERATED/i.test(extra)) return { kind: "expression", text: rawDefault, value: rawDefault };
+    if (NUMERIC_TYPES.has(dataType)) return { kind: "value", text: rawDefault, value: rawDefault };
+    return { kind: "value", text: `'${rawDefault}'`, value: rawDefault };
   }
 }
 

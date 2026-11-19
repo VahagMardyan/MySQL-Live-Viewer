@@ -21,11 +21,14 @@ class MariaDbDialect extends Dialect {
   // MariaDB stores string literals quoted ("'active'"), NULL as the text "NULL",
   // numbers bare, and anything else is an expression such as current_timestamp().
   parseDefault({ rawDefault, nullable }) {
+    // `value` is the plain value without quotes, used to prefill the edit form.
     if (rawDefault === null || rawDefault === "NULL") return Dialect.noDefault(nullable);
-    if (rawDefault.startsWith("'") || NUMBER_LITERAL.test(rawDefault)) {
-      return { kind: "value", text: rawDefault };
+    if (rawDefault.startsWith("'")) {
+      const value = rawDefault.slice(1, -1).replace(/''/g, "'").replace(/\\(.)/g, "$1");
+      return { kind: "value", text: rawDefault, value };
     }
-    return { kind: "expression", text: rawDefault };
+    if (NUMBER_LITERAL.test(rawDefault)) return { kind: "value", text: rawDefault, value: rawDefault };
+    return { kind: "expression", text: rawDefault, value: rawDefault };
   }
 }
 

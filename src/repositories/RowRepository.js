@@ -19,6 +19,11 @@ class RowRepository {
     return Number(row.n);
   }
 
+  async max(table, column) {
+    const [row] = await this.#db.query("SELECT MAX(??) AS m FROM ??", [column, table]);
+    return row.m;
+  }
+
   /**
    * Reads one page.
    * @param order      columns to order by, e.g. ["status", "order_id"]; must end with a unique key for keyset positions

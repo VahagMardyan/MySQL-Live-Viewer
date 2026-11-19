@@ -40,6 +40,11 @@ class RowCounter {
     return value;
   }
 
+  /** Forget the cached count, e.g. after rows were inserted or deleted. */
+  invalidate(table) {
+    this.#cache.delete(table);
+  }
+
   #isLarge(estimatedRows) {
     return estimatedRows != null && Number(estimatedRows) >= this.#threshold;
   }

@@ -101,6 +101,13 @@ class GroupService {
     return result;
   }
 
+  /** Forget cached groups of a table after its data or columns changed. */
+  invalidate(table) {
+    for (const key of this.#cache.keys()) {
+      if (JSON.parse(key)[0] === table) this.#cache.delete(key);
+    }
+  }
+
   static #parseAggregates(agg, byName) {
     if (agg === undefined || agg === "") return [];
     const parts = String(agg).split(",");

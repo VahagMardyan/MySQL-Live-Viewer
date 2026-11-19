@@ -31,11 +31,23 @@ class SchemaRepository {
     return table ?? null;
   }
 
+  /**
+   * The next AUTO_INCREMENT value, read from SHOW CREATE TABLE. information_schema
+   * can show a cached, outdated number; SHOW CREATE TABLE reads the live counter.
+   * MySQL leaves AUTO_INCREMENT= out of the output while the counter is at 1.
+   */
+  async getNextAutoIncrement(table) {
+    const [row] = await this.#db.query("SHOW CREATE TABLE ??", [table]);
+    const match = /\)\s*ENGINE=[^\n]*?\bAUTO_INCREMENT=(\d+)/i.exec(row["Create Table"] ?? "");
+    return match ? match[1] : "1";
+  }
+
   async getColumns(table) {
     const rows = await this.#db.query(
       `SELECT ORDINAL_POSITION AS position, COLUMN_NAME AS name, COLUMN_TYPE AS type,
               DATA_TYPE AS dataType, IS_NULLABLE AS isNullable, COLUMN_DEFAULT AS rawDefault,
-              COLUMN_KEY AS columnKey, EXTRA AS extra, COLUMN_COMMENT AS comment
+              COLUMN_KEY AS columnKey, EXTRA AS extra, COLUMN_COMMENT AS comment,
+              COLLATION_NAME AS collation
        FROM information_schema.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
        ORDER BY ORDINAL_POSITION`,

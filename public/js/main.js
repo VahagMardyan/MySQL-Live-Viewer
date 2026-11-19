@@ -12,12 +12,14 @@ new App({ api: new ApiClient("/api"), preferences: new Preferences() })
     pageSize: $("pageSize"),
     interval: $("interval"),
     pause: $("pause"),
+    lock: $("lock"),
     tabs: $("tabs"),
     views: $("views"),
     info: $("info"),
     pager: $("pager"),
     notice: $("notice"),
     groupbar: $("groupbar"),
+    editbar: $("editbar"),
     view: $("view"),
   })
   .start();

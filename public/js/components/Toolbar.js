@@ -1,7 +1,7 @@
 import { Component } from "./Component.js";
 import { formatCount } from "../utils/format.js";
 
-/** Header controls: database name, status dot, page size, refresh interval, pause. */
+/** Header controls: database name, status dot, page size, refresh interval, pause, edit lock. */
 export class Toolbar extends Component {
   #el;
 
@@ -11,10 +11,11 @@ export class Toolbar extends Component {
     this.#el.pageSize.addEventListener("change", (e) => this.actions.setPageSize(Number(e.target.value)));
     this.#el.interval.addEventListener("change", (e) => this.actions.setRefreshInterval(Number(e.target.value)));
     this.#el.pause.addEventListener("click", () => this.actions.togglePause());
+    this.#el.lock.addEventListener("click", () => this.actions.toggleLock());
   }
 
   render(state, patch) {
-    const { db, status, dot, pageSize, interval, pause } = this.#el;
+    const { db, status, dot, pageSize, interval, pause, lock } = this.#el;
 
     if ("meta" in patch && state.meta) {
       db.textContent = `· ${state.meta.database}`;
@@ -27,6 +28,15 @@ export class Toolbar extends Component {
     Toolbar.#syncValue(pageSize, state.pageSize);
     Toolbar.#syncValue(interval, state.interval);
     pause.textContent = state.paused ? "Resume" : "Pause";
+
+    if ("write" in patch || !lock.textContent) {
+      const unlocked = Boolean(state.write);
+      lock.classList.toggle("unlocked", unlocked);
+      lock.textContent = unlocked ? `🔓 ${state.write.user}` : "🔒 Locked";
+      lock.title = unlocked
+        ? `Editing is unlocked as MySQL user ${state.write.user}. Click to lock.`
+        : "Editing is locked. Click to unlock with a MySQL password.";
+    }
 
     if (state.error) {
       status.textContent = "error";

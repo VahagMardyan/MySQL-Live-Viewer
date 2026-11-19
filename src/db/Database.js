@@ -41,6 +41,20 @@ class Database {
     }
   }
 
+  /**
+   * Opens a single connection with other credentials, for an editing session.
+   * Same value formats as the pool, so values read and written match exactly.
+   */
+  static connect(options) {
+    return mysql.createConnection({
+      ...options,
+      connectTimeout: 10_000,
+      dateStrings: true,
+      supportBigNumbers: true,
+      bigNumberStrings: true,
+    });
+  }
+
   /** Runs a query and returns only the result rows. */
   async query(sql, params = []) {
     const [rows] = await this.#pool.query(sql, params);

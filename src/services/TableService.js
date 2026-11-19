@@ -4,6 +4,8 @@ const { KeyCursor } = require("./KeyCursor");
 // Flags MySQL stores in EXTRA that the API reports as separate fields.
 const HANDLED_EXTRA = /\b(auto_increment|DEFAULT_GENERATED)\b/gi;
 
+const BINARY_LIKE = /^(binary|varbinary|tinyblob|blob|mediumblob|longblob|bit|geometry|point|linestring|polygon|multipoint|multilinestring|multipolygon|geometrycollection|geomcollection)$/i;
+
 const NUMERIC_TYPES = new Set([
   "tinyint", "smallint", "mediumint", "int", "integer", "bigint",
   "decimal", "numeric", "float", "double", "real", "bit",
@@ -64,6 +66,10 @@ class TableService {
       uniqueConstraints,
       foreignKeys,
       checkConstraints: checks,
+      // Next AUTO_INCREMENT value, or null when the table has no auto-increment column.
+      autoIncrement: columns.some((c) => /auto_increment/i.test(c.extra)) && table.type !== "VIEW"
+        ? await this.#schema.getNextAutoIncrement(name)
+        : null,
     };
   }
 
@@ -212,10 +218,12 @@ class TableService {
         }
       : null;
 
+    const generated = /\b(VIRTUAL|STORED) GENERATED\b/i.test(col.extra);
     return {
       position: col.position,
       name: col.name,
       type: col.type,
+      dataType: col.dataType,
       nullable: col.nullable,
       default: col.default,
       primaryKey: primaryKey.includes(col.name),
@@ -227,6 +235,10 @@ class TableService {
       references,
       extra: col.extra.replace(HANDLED_EXTRA, "").replace(/\s+/g, " ").trim(),
       comment: col.comment,
+      generated,
+      onUpdateCurrentTimestamp: /on update current_timestamp/i.test(col.extra),
+      // Values the row editor can show as text. Binary, bit and spatial values can't be typed in.
+      editable: !generated && !BINARY_LIKE.test(col.dataType),
     };
   }
 }

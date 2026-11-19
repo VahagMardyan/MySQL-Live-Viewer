@@ -41,8 +41,13 @@ export class StructurePanel {
     this.#container.dataset.owner = "structure";
   }
 
-  static #columnsTable({ columns }) {
+  static #columnsTable({ columns, isView }) {
     const hasComments = columns.some((c) => c.comment);
+    // Edit / drop buttons per column (they ask for the password when needed).
+    const tools = (c) => isView ? "" : `<td class="col-tools">${
+      c.generated ? '<span class="muted" title="Generated columns can\'t be changed here">—</span>'
+        : `<button type="button" class="icon" data-edit-column="${esc(c.name)}" title="Change column">✎</button>`}<button
+        type="button" class="icon danger-text" data-drop-column="${esc(c.name)}" title="Drop column">🗑</button></td>`;
     const rows = columns
       .map((c) => `
         <tr>
@@ -55,13 +60,14 @@ export class StructurePanel {
           <td>${StructurePanel.#reference(c.references)}</td>
           <td>${c.extra ? `<code>${esc(c.extra)}</code>` : '<span class="muted">—</span>'}</td>
           ${hasComments ? `<td>${esc(c.comment)}</td>` : ""}
+          ${tools(c)}
         </tr>`)
       .join("");
     return `
       <table class="structure">
         <thead><tr>
           <th>#</th><th>Column</th><th>Type</th><th>Nullable</th><th>Default</th>
-          <th>Constraints</th><th>References</th><th>Extra</th>${hasComments ? "<th>Comment</th>" : ""}
+          <th>Constraints</th><th>References</th><th>Extra</th>${hasComments ? "<th>Comment</th>" : ""}${isView ? "" : "<th></th>"}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`;

@@ -11,14 +11,19 @@ const EXACT_COUNT_THRESHOLD = 100_000;
 // How long an exact COUNT(*) of a large table is reused before it is run again.
 const COUNT_CACHE_MS = 15_000;
 
+// After entering the MySQL password, editing stays unlocked this long after the last change.
+const WRITE_SESSION_MS = 5 * 60_000;
+
 /**
  * Immutable application settings, built from environment variables.
  * Use Config.fromEnv(process.env) instead of calling the constructor directly.
  */
 class Config {
-  constructor({ db, port, pageSizes, defaultPageSize, exactCountThreshold, countCacheMs }) {
+  constructor({ db, host, port, pageSizes, defaultPageSize, exactCountThreshold, countCacheMs, writeSessionMs }) {
     this.db = Object.freeze({ ...db });
+    this.host = host;
     this.port = port;
+    this.writeSessionMs = writeSessionMs;
     this.pageSizes = pageSizes;
     this.defaultPageSize = defaultPageSize;
     this.exactCountThreshold = exactCountThreshold;
@@ -42,7 +47,10 @@ class Config {
         password: env.DB_PASSWORD ?? "",
         database: env.DB_NAME,
       },
+      // Only this computer can open the viewer unless HOST is changed (e.g. 0.0.0.0 for your network).
+      host: env.HOST || "127.0.0.1",
       port: Config.#toPort(env.PORT, 3000, "PORT"),
+      writeSessionMs: WRITE_SESSION_MS,
       pageSizes: PAGE_SIZES,
       defaultPageSize: DEFAULT_PAGE_SIZE,
       exactCountThreshold: EXACT_COUNT_THRESHOLD,

@@ -7,6 +7,13 @@ import { Pager } from "./components/Pager.js";
 import { Notice } from "./components/Notice.js";
 import { GroupBar } from "./components/GroupBar.js";
 import { ContentArea } from "./components/ContentArea.js";
+import { EditBar } from "./components/EditBar.js";
+import { WriteAccess } from "./services/WriteAccess.js";
+import { openModal, confirmDialog, isModalOpen, CancelledError } from "./ui/Modal.js";
+import { rowEditor, columnEditor } from "./ui/editors.js";
+import { showToast } from "./ui/toast.js";
+import { rowKeyFunction, rowObject, rowKeyObject } from "./utils/rows.js";
+import { esc, formatCount, plural } from "./utils/format.js";
 
 const INTERVALS = [1000, 2000, 5000, 10000];
 const VIEWS = ["data", "group", "structure"];
@@ -26,6 +33,7 @@ export class App {
   #prefs;
   #store;
   #poller;
+  #write;
   #requestId = 0; // used to ignore responses that arrive after a newer request
 
   constructor({ api, preferences }) {
@@ -56,8 +64,14 @@ export class App {
       structure: null,
       error: null,
       updatedAt: null,
+
+      // editing
+      selected: [], // row keys (JSON of primary-key values) checked on the current page
+      write: null,  // { user, expiresAt } while editing is unlocked
     });
-    this.#poller = new Poller(() => this.refresh(), this.#store.state.interval);
+    this.#write = new WriteAccess({ api, store: this.#store });
+    // Auto-refresh pauses while a dialog is open, so the table doesn't change under an edit.
+    this.#poller = new Poller(() => (isModalOpen() ? undefined : this.refresh()), this.#store.state.interval);
   }
 
   mount(el) {
@@ -68,6 +82,7 @@ export class App {
     new Pager(deps, el.pager);
     new Notice(deps, el.notice);
     new GroupBar(deps, el.groupbar);
+    new EditBar(deps, el.editbar);
     new ContentArea(deps, el.view);
     return this;
   }
@@ -89,6 +104,7 @@ export class App {
       currentTable: name,
       sort: null, anchor: FIRST_PAGE, pageNumber: 1,
       group: NO_GROUP, groupPage: 1, groups: null,
+      selected: [],
     });
     this.#prefs.save({ table: name });
     this.refresh();
@@ -102,7 +118,7 @@ export class App {
   }
 
   setPageSize(pageSize) {
-    this.#store.set({ pageSize, anchor: FIRST_PAGE, pageNumber: 1, groupPage: 1 });
+    this.#store.set({ pageSize, anchor: FIRST_PAGE, pageNumber: 1, groupPage: 1, selected: [] });
     this.#prefs.save({ pageSize });
     this.refresh();
   }
@@ -133,7 +149,7 @@ export class App {
     if (!sort || sort.column !== column) next = { column, direction: "ASC" };
     else if (sort.direction === "ASC") next = { column, direction: "DESC" };
     else next = null;
-    this.#store.set({ sort: next, anchor: FIRST_PAGE, pageNumber: 1 });
+    this.#store.set({ sort: next, anchor: FIRST_PAGE, pageNumber: 1, selected: [] });
     this.refresh();
   }
 
@@ -172,7 +188,7 @@ export class App {
   }
 
   #goTo(anchor, pageNumber) {
-    this.#store.set({ anchor, pageNumber });
+    this.#store.set({ anchor, pageNumber, selected: [] });
     this.refresh();
   }
 
@@ -223,6 +239,218 @@ export class App {
     this.refresh();
   }
 
+  // ---- selection ----
+
+  toggleRow(key, checked) {
+    const selected = this.#state.selected.filter((k) => k !== key);
+    if (checked) selected.push(key);
+    this.#store.set({ selected });
+  }
+
+  toggleAllRows(checked) {
+    const { rows } = this.#state;
+    if (!rows) return;
+    const keyOf = rowKeyFunction(rows);
+    this.#store.set({ selected: checked ? rows.rows.map((r, i) => keyOf(r, i)) : [] });
+  }
+
+  clearSelection() {
+    this.#store.set({ selected: [] });
+  }
+
+  // ---- editing: lock ----
+
+  async toggleLock() {
+    if (this.#write.unlocked) {
+      await this.#write.lock();
+      showToast("Editing locked");
+      return;
+    }
+    try {
+      const session = await this.#write.unlock();
+      showToast(`Editing unlocked as ${session.user}`);
+    } catch (err) {
+      if (!(err instanceof CancelledError)) showToast(err.message, "error");
+    }
+  }
+
+  // ---- editing: rows ----
+
+  async addRow() {
+    const { currentTable: table, structure } = this.#state;
+    const editor = rowEditor(structure);
+    const result = await openModal({
+      title: `Add row to ${table}`,
+      submitLabel: "Add row",
+      wide: true,
+      body: editor.body,
+      onMount: (form) => editor.mount(form),
+      onSubmit: (form) => this.#write.run(() => this.#api.insertRow(table, editor.read(form).values)),
+    });
+    if (result) this.#changed(result.insertId ? `Row added (id ${result.insertId})` : "Row added");
+  }
+
+  async editRow(key) {
+    const { currentTable: table, structure, rows } = this.#state;
+    const keyOf = rowKeyFunction(rows);
+    const row = rows.rows.find((r, i) => keyOf(r, i) === key);
+    if (!row) return;
+    const editor = rowEditor(structure, rowObject(rows, row));
+    const result = await openModal({
+      title: `Edit row in ${table}`,
+      submitLabel: "Save changes",
+      wide: true,
+      body: editor.body,
+      onMount: (form) => editor.mount(form),
+      onSubmit: async (form) => {
+        const { changes, original } = editor.read(form);
+        if (!Object.keys(changes).length) return "unchanged";
+        return this.#write.run(() =>
+          this.#api.updateRow(table, { key: rowKeyObject(rows, row), original, changes }));
+      },
+    });
+    if (result === "unchanged") showToast("Nothing was changed");
+    else if (result) this.#changed("Row saved");
+  }
+
+  async deleteSelectedRows() {
+    const { currentTable: table, rows, selected } = this.#state;
+    if (!rows || !selected.length) return;
+    const keyOf = rowKeyFunction(rows);
+    const keys = rows.rows
+      .filter((r, i) => selected.includes(keyOf(r, i)))
+      .map((r) => rowKeyObject(rows, r));
+
+    const result = await confirmDialog({
+      title: `Delete ${plural(keys.length, "row")}?`,
+      message: `<p>${plural(keys.length, "row")} will be deleted from <b>${esc(table)}</b>. This can't be undone.</p>
+        <p class="muted">If other tables reference these rows through a foreign key, MySQL refuses the
+        delete (or also deletes the referencing rows, if the key is ON DELETE CASCADE).</p>`,
+      confirmLabel: `Delete ${plural(keys.length, "row")}`,
+      onConfirm: () => this.#write.run(() => this.#api.deleteRows(table, keys)),
+    });
+    if (result) {
+      this.#store.set({ selected: [] });
+      this.#changed(`Deleted ${plural(result.deleted, "row")}`);
+    }
+  }
+
+  // ---- editing: table ----
+
+  async truncateTable() {
+    const { currentTable: table, tables } = this.#state;
+    const info = tables.find((t) => t.name === table);
+    const count = info ? `${info.exact ? "" : "about "}${formatCount(info.rows)}` : "all";
+    const result = await confirmDialog({
+      title: `Truncate ${table}?`,
+      message: `<p>This deletes <b>all ${count} rows</b> of <b>${esc(table)}</b> at once and resets
+        AUTO_INCREMENT to 1. It can't be undone.</p>
+        <p class="muted">MySQL refuses if another table has a foreign key pointing to this one.</p>`,
+      confirmLabel: "Truncate table",
+      typeToConfirm: table,
+      onConfirm: (form) => this.#write.run(() => this.#api.truncate(table, form.elements.confirm.value)),
+    });
+    if (result) {
+      this.#store.set({ selected: [], anchor: FIRST_PAGE, pageNumber: 1 });
+      this.#changed(`${table} truncated`);
+    }
+  }
+
+  async resetAutoIncrement() {
+    const { currentTable: table } = this.#state;
+    let info;
+    try {
+      info = await this.#api.getAutoIncrement(table);
+    } catch (err) {
+      showToast(err.message, "error");
+      return;
+    }
+    const result = await openModal({
+      title: `Reset AUTO_INCREMENT of ${table}`,
+      submitLabel: "Set value",
+      body: `
+        <dl class="facts">
+          <dt>Column</dt><dd><code>${esc(info.column)}</code></dd>
+          <dt>Next value now</dt><dd>${esc(info.next)}</dd>
+          <dt>Highest value in table</dt><dd>${info.max === null ? '<span class="muted">table is empty</span>' : esc(info.max)}</dd>
+        </dl>
+        <label class="radio"><input type="radio" name="mode" value="lowest" checked>
+          Reset to the lowest possible value: <b>${esc(info.lowest)}</b></label>
+        <label class="radio"><input type="radio" name="mode" value="custom">
+          Set to <input name="value" inputmode="numeric" class="short" value="${esc(info.lowest)}" disabled></label>
+        <p class="modal-note">MySQL never sets it below the highest value + 1 (${esc(info.lowest)}).
+          A lower number is raised to that.</p>`,
+      onMount: (form) => {
+        form.addEventListener("change", () => {
+          form.elements.value.disabled = form.elements.mode.value !== "custom";
+        });
+      },
+      onSubmit: (form) => {
+        const value = form.elements.mode.value === "custom" ? form.elements.value.value.trim() : undefined;
+        return this.#write.run(() => this.#api.resetAutoIncrement(table, value));
+      },
+    });
+    if (result) {
+      this.#changed(`Next AUTO_INCREMENT value is ${result.next}${result.raised ? " (raised to the lowest possible)" : ""}`);
+    }
+  }
+
+  // ---- editing: columns ----
+
+  async addColumn() {
+    const { currentTable: table, structure } = this.#state;
+    const editor = columnEditor(structure);
+    const result = await openModal({
+      title: `Add column to ${table}`,
+      submitLabel: "Add column",
+      wide: true,
+      body: editor.body,
+      onMount: (form) => editor.mount(form),
+      onSubmit: (form) => this.#write.run(() => this.#api.addColumn(table, editor.read(form))),
+    });
+    if (result) this.#changed(`Column ${result.added} added`);
+  }
+
+  async editColumn(name) {
+    const { currentTable: table, structure, tables } = this.#state;
+    const column = structure.columns.find((c) => c.name === name);
+    if (!column) return;
+    if (column.generated) {
+      showToast("Generated columns can't be changed here", "error");
+      return;
+    }
+    const largeTable = (tables.find((t) => t.name === table)?.rows ?? 0) > 100_000;
+    const editor = columnEditor(structure, column, { largeTable });
+    const result = await openModal({
+      title: `Change column ${name}`,
+      submitLabel: "Save column",
+      wide: true,
+      body: editor.body,
+      onMount: (form) => editor.mount(form),
+      onSubmit: (form) => this.#write.run(() => this.#api.modifyColumn(table, name, editor.read(form))),
+    });
+    if (result) this.#changed(`Column ${result.modified} saved`);
+  }
+
+  async dropColumn(name) {
+    const { currentTable: table } = this.#state;
+    const result = await confirmDialog({
+      title: `Drop column ${name}?`,
+      message: `<p>The column <b>${esc(name)}</b> and all its values will be removed from
+        <b>${esc(table)}</b>. This can't be undone.</p>`,
+      confirmLabel: "Drop column",
+      typeToConfirm: name,
+      onConfirm: (form) => this.#write.run(() => this.#api.dropColumn(table, name, form.elements.confirm.value)),
+    });
+    if (result) this.#changed(`Column ${name} dropped`);
+  }
+
+  /** After a successful change: tell the user and reload right away. */
+  #changed(message) {
+    showToast(message);
+    this.refresh();
+  }
+
   // ---- data loading ----
 
   async refresh() {
@@ -259,6 +487,11 @@ export class App {
         if (rows) {
           patch.rows = rows;
           patch.pageNumber = rows.pageNumber;
+          // Keep only selected rows that are still on the page (others were deleted).
+          const keyOf = rowKeyFunction(rows);
+          const present = new Set(rows.rows.map((r, i) => keyOf(r, i)));
+          const kept = this.#state.selected.filter((k) => present.has(k));
+          if (kept.length !== this.#state.selected.length) patch.selected = kept;
         }
         if (groups) {
           patch.groups = groups;

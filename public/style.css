@@ -473,3 +473,351 @@ td.num {
   border-radius: 8px;
   font-size: 13px;
 }
+
+/* ---------- editing ---------- */
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.danger {
+  background: var(--error);
+  border-color: var(--error);
+  color: #fff;
+}
+
+button.danger-text {
+  color: var(--error);
+}
+
+button.subtle {
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+
+button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+button.icon {
+  border: none;
+  background: none;
+  padding: 2px 6px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+button.icon:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+button.icon.danger-text:hover {
+  color: var(--error);
+}
+
+.lock {
+  font-size: 13px;
+}
+
+.lock.unlocked {
+  border-color: var(--ai);
+  color: var(--ai);
+}
+
+.editbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 20px 0;
+}
+
+.editbar[hidden] {
+  display: none;
+}
+
+.editbar .sep {
+  flex: 1;
+}
+
+/* row checkboxes and edit buttons */
+th.row-tools,
+td.row-tools {
+  width: 1%;
+  padding-right: 4px;
+  white-space: nowrap;
+}
+
+td.row-tools input,
+th.row-tools input {
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+tr.selected td {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+td.col-tools {
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* ---------- dialogs ---------- */
+
+dialog.modal {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 20px 50px rgb(0 0 0 / .25);
+}
+
+dialog.modal.wide {
+  width: min(720px, calc(100vw - 32px));
+}
+
+dialog.modal::backdrop {
+  background: rgb(15 18 25 / .45);
+}
+
+dialog.modal form {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+
+dialog.modal header,
+dialog.modal footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+}
+
+dialog.modal header {
+  border-bottom: 1px solid var(--border);
+}
+
+dialog.modal h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+dialog.modal footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+}
+
+.modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+}
+
+.modal-body p {
+  margin: 0;
+}
+
+.modal-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.modal-error {
+  margin: 0 18px 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: var(--error);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.modal-error[hidden] {
+  display: none;
+}
+
+dialog input:not([type=checkbox]):not([type=radio]),
+dialog select,
+dialog textarea {
+  font: inherit;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+dialog input:disabled,
+dialog select:disabled,
+dialog textarea:disabled {
+  opacity: .5;
+}
+
+dialog textarea {
+  resize: vertical;
+}
+
+label.stack {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+label.stack input,
+label.stack select {
+  color: var(--text);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-size: 13px;
+}
+
+.checks label,
+label.radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+label.radio input.short {
+  width: 140px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.confirm-type {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.confirm-message {
+  display: grid;
+  gap: 8px;
+}
+
+/* row editor fields */
+.fields {
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.field > label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding-top: 6px;
+  font-size: 13px;
+}
+
+.field > label small {
+  width: 100%;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.field-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.field-input {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+dialog .field-input select.mode {
+  width: auto;
+  flex: none;
+}
+
+.field-input .muted {
+  padding-top: 6px;
+  font-size: 13px;
+}
+
+@media (max-width: 560px) {
+  .field,
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- toasts ---------- */
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  gap: 8px;
+  z-index: 10;
+  max-width: min(420px, calc(100vw - 32px));
+}
+
+.toast {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 13px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / .2);
+  transition: opacity .4s;
+}
+
+.toast-error {
+  background: var(--error);
+  color: #fff;
+}
+
+.toast.hide {
+  opacity: 0;
+}

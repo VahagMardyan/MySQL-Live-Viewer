@@ -10,7 +10,11 @@ const { GroupService } = require("./src/services/GroupService");
 const { PageSizePolicy } = require("./src/services/PageSizePolicy");
 const { RowCounter } = require("./src/services/RowCounter");
 const { TableService } = require("./src/services/TableService");
+const { EditService } = require("./src/services/EditService");
+const { WriteSessionManager } = require("./src/write/WriteSessionManager");
+const { LoginThrottle } = require("./src/write/LoginThrottle");
 const { TableController } = require("./src/http/TableController");
+const { EditController } = require("./src/http/EditController");
 const { WebServer } = require("./src/http/WebServer");
 
 async function main() {
@@ -33,14 +37,31 @@ async function main() {
     groupRepository: new GroupRepository(db),
     pageSizePolicy,
   });
+  const rowCounter = new RowCounter(rowRepository, {
+    threshold: config.exactCountThreshold,
+    ttlMs: config.countCacheMs,
+  });
   const tableService = new TableService({
     schemaRepository,
     rowRepository,
     pageSizePolicy,
-    rowCounter: new RowCounter(rowRepository, {
-      threshold: config.exactCountThreshold,
-      ttlMs: config.countCacheMs,
-    }),
+    rowCounter,
+  });
+
+  // Editing: the .env account only reads. Changes run on a separate connection opened
+  // with the MySQL username and password the user types in the browser.
+  const sessionManager = new WriteSessionManager({
+    connect: ({ user, password }) => Database.connect({ ...config.db, user, password }),
+    ttlMs: config.writeSessionMs,
+    throttle: new LoginThrottle(),
+  });
+  const editService = new EditService({
+    schemaRepository,
+    rowRepository,
+    onChange: (table) => {
+      rowCounter.invalidate(table);
+      groupService.invalidate(table);
+    },
   });
 
   const controller = new TableController({
@@ -52,21 +73,29 @@ async function main() {
       pageSizes: pageSizePolicy.allowed,
       defaultPageSize: pageSizePolicy.default,
       aggregateFunctions: GroupRepository.functions,
+      readUser: config.db.user,
+      writeSessionMinutes: Math.round(config.writeSessionMs / 60_000),
     },
   });
 
   const server = new WebServer({
+    host: config.host,
     port: config.port,
     publicDir: path.join(__dirname, "public"),
-    controllers: [controller],
+    controllers: [controller, new EditController({ sessionManager, editService })],
   });
 
   await server.start();
-  console.log(`MySQL Live Viewer running at http://localhost:${config.port}`);
+  const shownHost = ["127.0.0.1", "::1", "0.0.0.0", "::"].includes(config.host) ? "localhost" : config.host;
+  console.log(`MySQL Live Viewer running at http://${shownHost}:${config.port}`);
   console.log(`Database: ${config.db.database} @ ${config.db.host}:${config.db.port} (${dialect.name} ${version})`);
+  if (!["127.0.0.1", "::1", "localhost"].includes(config.host)) {
+    console.log(`Warning: HOST=${config.host} lets other computers on your network open the viewer.`);
+  }
 
   const shutdown = async () => {
     await server.stop();
+    await sessionManager.closeAll();
     await db.close();
     process.exit(0);
   };
